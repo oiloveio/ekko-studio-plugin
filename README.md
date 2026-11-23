@@ -56,3 +56,7 @@ Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#86b30c33d0aa07e1f6762718b5c
 ## 连接与配置
 
 启用后，在 Studio 设置中分别打开「飞书连接」和「邮箱连接」，检查 CLI、账号和只读业务访问状态。邮箱页可保存当前 Studio 用户和 Profile 的默认账号名称；显式工具参数优先。页面不会保存认证凭据，也不能隔离服务器系统账号中的 CLI 凭据；登录、授权及邮箱连接配置仍需在运行 Studio 的服务器完成。
+
+## 跟进上游与发布
+
+飞书 CLI、Himalaya 和 Studio 的版本基线、每周检查及发布回滚步骤见 [维护手册](docs/maintenance.md)。上游版本检查只提示维护者，不会自动替换已安装的程序或凭据。

@@ -1,0 +1,5 @@
+{
+  "lark-cli": { "repository": "larksuite/cli", "baseline": "v1.0.100", "meaning": "bundled" },
+  "himalaya": { "repository": "pimalaya/himalaya", "baseline": "v2.2.1", "meaning": "last-tested" },
+  "ekko-studio": { "repository": "EKKOLearnAI/ekko-studio", "baseline": "v0.8.30", "meaning": "api-tested" }
+}
