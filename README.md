@@ -1,16 +1,45 @@
 # Ekko Studio 自建插件库
 
-这里集中管理自用的 Ekko Studio 插件。每个插件都是 `plugins/` 下的独立目录，有自己的清单、代码和说明。
+集中管理自用的 Ekko Studio 插件。每个插件都在 `plugins/` 下独立维护，包含自己的插件清单、代码、测试和使用说明。
 
-| 插件 | 用途 | 目录 |
-| --- | --- | --- |
-| 飞书 CLI | 调用服务器已授权的 lark-cli 操作飞书 | [plugins/lark-cli](plugins/lark-cli/README.md) |
-| Himalaya 邮箱 | 查询邮箱、搜索和读取邮件 | [plugins/himalaya](plugins/himalaya/README.md) |
+| 插件 | 能力 | 安装目录 | 当前验证 |
+| --- | --- | --- | --- |
+| [飞书 CLI](plugins/lark-cli/README.md) | 通过 lark-cli 调用飞书；包含读写操作 | `plugins/lark-cli` | 本机 CLI 帮助及基础测试通过 |
+| [Himalaya 邮箱](plugins/himalaya/README.md) | 查询账号、邮箱、邮件列表，搜索及读取邮件 | `plugins/himalaya` | 本机 Himalaya 2.2.1 版本及基础测试通过 |
 
-## 安装
+两个插件均未在目标 Studio 服务器完成安装、登录或真实业务联调。功能受服务器上的 CLI 版本、账号权限及网络影响。
 
-本仓库是私有仓库，当前作为插件源码和说明的集中目录。Ekko Studio 的普通 GitHub 地址安装只支持公开仓库的根目录，不会扫描这里的 `plugins/` 并把它们显示为插件市场。
+## 安装到 Studio
 
-保持仓库私有时，先将需要的插件目录放到 Studio 服务器可访问的位置，再在「插件中心 → 安装插件」中分别填写对应插件目录的服务器绝对路径。每个目录都包含独立的 `plugin.json`、`package.json` 和 JavaScript 入口。实际路径取决于部署和容器挂载；本仓库尚未在目标服务器验证安装。
+本仓库为私有仓库，是插件源码和说明的集中目录；Ekko Studio 不会把其中的子目录自动列为可安装的插件市场。[Studio 官方文档](https://github.com/EKKOLearnAI/ekko-studio/blob/main/docs/plugins.md)说明，普通 GitHub 链接只解析公开仓库的根目录。仓库地址和 GitHub 子目录网页地址都不能直接用于安装本仓库里的插件。
 
-两个插件分别依赖服务器上的 `lark-cli` 和 `himalaya` 及对应的登录配置，不随插件安装。它们使用 Studio 进程所在操作系统账号的凭据，不会按 Studio 用户自动隔离。详情及已验证范围见各插件说明。
+1. 在运行 Studio 的服务器上，用有权限访问该私有仓库的 Git 账号检出仓库，例如：
+
+   ```bash
+   git clone https://github.com/oiloveio/ekko-studio-plugin.git /实际路径/ekko-studio-plugin
+   ```
+
+   `/实际路径/` 是示例，换成服务器上可读写的位置。如果 Studio 运行在容器中，仓库须位于容器可读取的挂载目录；安装时填写容器内路径。
+
+2. 在 Studio「插件中心 → 安装插件」中，分别填写插件所在目录的绝对路径：
+
+   ```text
+   /实际路径/ekko-studio-plugin/plugins/lark-cli
+   /实际路径/ekko-studio-plugin/plugins/himalaya
+   ```
+
+3. 安装并启用需要的插件。新安装的第三方插件默认禁用。安装后刷新 Agent 的 MCP 工具列表或开始新会话。
+
+以上路径仅作格式示例，不是已部署的安装地址。本地目录安装会复制当前文件；更新仓库代码后需要按 Studio 的安装或开发链接机制重新安装或重载。插件本身无需 npm install 或构建。
+
+## 服务器准备与权限
+
+- 飞书插件需要在 Studio 进程所在环境安装 `lark-cli`，并配置和授权飞书账号。
+- 邮箱插件需要在同一环境安装、配置 `himalaya`；本机验证版本为 2.2.1。邮箱插件当前只支持查询和读取，不支持发邮件。
+- 两个插件都使用 Studio 进程所属操作系统账号的 CLI 配置与凭据，不会随 Studio 用户或 Profile 自动隔离。只有信任所有可调用插件工具的用户时才启用。
+- 飞书插件可执行写入及原生 API 调用；用户授权、飞书权限和 Studio 访问控制需要分别核对。插件拒绝显式 `--yes` / `-y`，但这不构成完整的审批或安全机制。
+- CLI 输出可能进入会话记录；插件限制单次输出 1 MiB 和执行时间 110 秒。
+
+## 开发与验证
+
+在对应插件目录运行 `npm test`，分别检查飞书和邮箱插件。测试包括命令参数、取消请求及调用本机 CLI；它们不证明服务器环境、飞书或邮箱账号可用。
