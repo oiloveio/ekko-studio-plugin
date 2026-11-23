@@ -11,9 +11,18 @@
 
 ## 安装到 Studio
 
-本仓库为私有仓库，是插件源码和说明的集中目录；Ekko Studio 不会把其中的子目录自动列为可安装的插件市场。[Studio 官方文档](https://github.com/EKKOLearnAI/ekko-studio/blob/main/docs/plugins.md)说明，普通 GitHub 链接只解析公开仓库的根目录。仓库地址和 GitHub 子目录网页地址都不能直接用于安装本仓库里的插件。
+本仓库的 `main` 分支集中维护插件源码；Ekko Studio 不会自动扫描子目录。[Studio 官方文档](https://github.com/EKKOLearnAI/ekko-studio/blob/main/docs/plugins.md)支持固定到完整提交的 GitHub 安装源。以下发布提交各自以插件内容为根目录，可分别粘贴到 Studio 的「安装插件」输入框：
 
-1. 在运行 Studio 的服务器上，用有权限访问该私有仓库的 Git 账号检出仓库，例如：
+```text
+飞书 CLI：github:oiloveio/ekko-studio-plugin#762c3fa6393efe2220cc8eea823639045fcf13e4
+Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#b35ad06a5811341e2e9997e7b4753c4850e970dc
+```
+
+安装时只复制冒号后的完整 `github:...` 字符串。这些是固定版本；后续更新插件时需要生成并使用新的提交地址。发布分支分别为 `releases/lark-cli` 和 `releases/himalaya`。仓库目前为公开状态；若改为私有，远程固定提交安装能否认证取决于服务器环境，尚未验证。
+
+也可使用服务器本地目录安装：
+
+1. 在运行 Studio 的服务器上检出仓库，例如：
 
    ```bash
    git clone https://github.com/oiloveio/ekko-studio-plugin.git /实际路径/ekko-studio-plugin
