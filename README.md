@@ -1,29 +1,16 @@
-# Ekko Studio 插件仓库
+# Ekko Studio 自建插件库
 
-集中维护自用的 Ekko Studio 插件。目前提供飞书 CLI 和 Himalaya 邮箱插件，后续可增加其他插件。
+这里集中管理自用的 Ekko Studio 插件。每个插件都是 `plugins/` 下的独立目录，有自己的清单、代码和说明。
 
-Himalaya 邮箱插件位于 [plugins/himalaya](plugins/himalaya/README.md)，支持查询和读取邮件，依赖服务器已有的 Himalaya CLI 和邮箱配置。
-
-## 飞书 CLI
-
-通过服务器上已安装并授权的 `lark-cli`，让 Studio Agent 查询和操作飞书文档、表格、消息及其他 CLI 支持的业务。使用前须在 Studio 服务器安装 CLI 并登录；插件不包含 CLI 或飞书凭据。
+| 插件 | 用途 | 目录 |
+| --- | --- | --- |
+| 飞书 CLI | 调用服务器已授权的 lark-cli 操作飞书 | [plugins/lark-cli](plugins/lark-cli/README.md) |
+| Himalaya 邮箱 | 查询邮箱、搜索和读取邮件 | [plugins/himalaya](plugins/himalaya/README.md) |
 
 ## 安装
 
-本仓库为私有仓库。Studio 的普通 GitHub 仓库链接安装仅支持公开仓库，因此不能把本仓库网页地址当作已验证的安装地址。
+本仓库是私有仓库，当前作为插件源码和说明的集中目录。Ekko Studio 的普通 GitHub 地址安装只支持公开仓库的根目录，不会扫描这里的 `plugins/` 并把它们显示为插件市场。
 
-将仓库通过已授权的 Git 客户端检出到 Studio 服务器，在插件中心选择「安装插件」，填写检出目录的绝对路径。目录根部须包含 `plugin.json`、`package.json` 和 `server.mjs`。远程部署时路径必须是服务器路径，不能填写本机路径。此插件无需构建或 npm install。
+保持仓库私有时，先将需要的插件目录放到 Studio 服务器可访问的位置，再在「插件中心 → 安装插件」中分别填写对应插件目录的服务器绝对路径。每个目录都包含独立的 `plugin.json`、`package.json` 和 JavaScript 入口。实际路径取决于部署和容器挂载；本仓库尚未在目标服务器验证安装。
 
-安装后启用插件，刷新 Agent 的 MCP 工具列表或开始新会话。命令示例：`{"args":["docs","--help"]}`、`{"args":["schema","drive.file.list"]}`。登录和权限配置需在服务器终端完成。
-
-## 使用边界
-
-插件使用 Studio 进程所在系统账号的飞书 CLI 登录态，不随 Studio 用户或 Profile 自动隔离。工具支持写操作，只应在用户授权范围内使用；可能访问服务器文件。插件禁止 `--yes`，高风险操作需在服务器终端按 CLI 提示处理。命令超时为 110 秒，输出上限为 1 MiB；敏感查询结果可能进入会话记录。
-
-## 多插件维护
-
-当前根目录是飞书插件。后续插件可在本仓库独立目录维护，并另行准备根目录包含对应清单和入口的发布快照。Studio 不接受 GitHub 子目录页面作为普通仓库安装地址；私有仓库的固定提交远程安装是否可用取决于服务器认证环境，尚未验证。
-
-## 验证
-
-本地运行 `npm test`。单元测试不能代替 Studio 宿主安装、服务器 CLI 登录及实际飞书接口调用验证。
+两个插件分别依赖服务器上的 `lark-cli` 和 `himalaya` 及对应的登录配置，不随插件安装。它们使用 Studio 进程所在操作系统账号的凭据，不会按 Studio 用户自动隔离。详情及已验证范围见各插件说明。
