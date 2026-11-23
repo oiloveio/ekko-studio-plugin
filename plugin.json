@@ -1,0 +1,1 @@
+{"id":"himalaya-mail","name":"Himalaya 邮箱","version":"0.1.0","apiVersion":1,"description":"使用 Himalaya CLI 查询邮箱、搜索及读取邮件。","server":"server.mjs","permissions":["tools"]}
