@@ -14,8 +14,8 @@
 本仓库的 `main` 分支集中维护插件源码；Ekko Studio 不会自动扫描子目录。[Studio 官方文档](https://github.com/EKKOLearnAI/ekko-studio/blob/main/docs/plugins.md)支持固定到完整提交的 GitHub 安装源。以下发布提交各自以插件内容为根目录，可分别粘贴到 Studio 的「安装插件」输入框：
 
 ```text
-飞书 CLI：github:oiloveio/ekko-studio-plugin#0e68fe2368bc50f482d58c36d1772e056e0c3420
-Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#7845819d3ba17d0a5600d7ac88c732c6481b8457
+飞书 CLI：github:oiloveio/ekko-studio-plugin#403a65a7936ce4f595eeb903aa454bc5beb08a60
+Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#86b30c33d0aa07e1f6762718b5cc1d3031e8ac99
 ```
 
 安装时只复制冒号后的完整 `github:...` 字符串。这些是固定版本；后续更新插件时需要生成并使用新的提交地址。发布分支分别为 `releases/lark-cli` 和 `releases/himalaya`。仓库目前为公开状态；若改为私有，远程固定提交安装能否认证取决于服务器环境，尚未验证。
