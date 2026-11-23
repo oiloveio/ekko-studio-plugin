@@ -1,6 +1,8 @@
 # Ekko Studio 插件仓库
 
-集中维护自用的 Ekko Studio 插件。目前提供飞书 CLI 插件，后续可增加其他插件。
+集中维护自用的 Ekko Studio 插件。目前提供飞书 CLI 和 Himalaya 邮箱插件，后续可增加其他插件。
+
+Himalaya 邮箱插件位于 [plugins/himalaya](plugins/himalaya/README.md)，支持查询和读取邮件，依赖服务器已有的 Himalaya CLI 和邮箱配置。
 
 ## 飞书 CLI
 
