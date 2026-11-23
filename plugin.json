@@ -1,0 +1,9 @@
+{
+  "id": "lark-cli",
+  "name": "飞书 CLI",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "description": "通过服务器上的 lark-cli 为 Studio Agent 提供飞书操作能力。",
+  "server": "server.mjs",
+  "permissions": ["tools"]
+}
