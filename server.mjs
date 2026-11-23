@@ -26,7 +26,7 @@ export async function prepareCli(dataDir) {
   await mkdir(dataDir, { recursive: true, mode: 0o700 })
   const temp = await mkdtemp(join(dataDir, '.lark-cli-'))
   try {
-    await execFileAsync('tar', ['-xzf', archive, '-C', temp, 'lark-cli'], { timeout: 30000 })
+    await execFileAsync('tar', ['--no-same-owner', '-xzf', archive, '-C', temp, 'lark-cli'], { timeout: 30000 })
     const target = join(dataDir, 'lark-cli-1.0.100')
     await chmod(join(temp, 'lark-cli'), 0o700)
     await rename(join(temp, 'lark-cli'), target)
@@ -70,6 +70,27 @@ export function executeCli(args, { signal, executable = 'lark-cli' } = {}) {
 
 export function apply(ctx) {
   let prepared
+  const getExecutable = () => {
+    prepared ??= prepareCli(ctx.paths?.dataDir).catch(error => { prepared = undefined; throw error })
+    return prepared
+  }
+  ctx.extensions.rpc.register('check-connection', async (_input, run) => {
+    const checks = []
+    try {
+      const executable = await getExecutable()
+      const identity = await executeCli(['whoami'], { signal: run?.signal, executable })
+      if (identity.exitCode !== 0) return { ok: false, checks: [{ label: '程序与账号', state: 'error' }], message: '无法读取飞书账号。请检查服务器上的 CLI 配置和授权。' }
+      let user
+      try { user = JSON.parse(identity.stdout) } catch { return { ok: false, checks: [{ label: '账号状态', state: 'error' }], message: '无法识别 CLI 返回的账号状态。' } }
+      checks.push({ label: 'CLI 程序', state: 'ok' })
+      const ready = user.available === true && ['ready', 'needs_refresh'].includes(user.tokenStatus)
+      checks.push({ label: '账号授权', state: ready ? 'ok' : 'warning' })
+      if (!ready) return { ok: false, checks, account: user.onBehalfOf?.userName || '', message: '账号未就绪，请在服务器检查授权。' }
+      const result = await executeCli(['calendar', '+agenda'], { signal: run?.signal, executable })
+      checks.push({ label: '日历只读请求', state: result.exitCode === 0 ? 'ok' : 'warning' })
+      return { ok: result.exitCode === 0, checks, account: user.onBehalfOf?.userName || '', message: result.exitCode === 0 ? '已成功验证飞书日历只读请求。' : '日历请求未通过，请检查网络及日历权限；其他飞书能力可能仍可用。' }
+    } catch { return { ok: false, checks: [{ label: 'CLI 程序', state: 'error' }], message: 'CLI 无法启动，请检查服务器平台、文件权限及 tar。' } }
+  })
   return ctx.extensions.tools.register({
     name: 'run',
     description: '调用服务器已安装并授权的 lark-cli 操作飞书。先用 ["领域", "--help"] 或 ["schema", "服务.资源.方法"] 查询，再传参数数组；不要包含 lark-cli 本身。优先 +快捷命令。写入前核对用户授权，不得擅自发消息。本工具拒绝显式 --yes，但原生 API 仍可执行写操作，此限制不构成审批。所有 Studio 用户共享服务器操作系统账号的飞书凭据，不按 Studio 用户隔离。',
@@ -77,8 +98,7 @@ export function apply(ctx) {
     inputSchema: { type: 'object', properties: { args: { type: 'array', items: { type: 'string' }, description: '不含程序名的参数数组，例如 ["docs", "--help"]。' } }, required: ['args'] },
     async execute({ args }, run) {
       try {
-        prepared ??= prepareCli(ctx.paths?.dataDir).catch(error => { prepared = undefined; throw error })
-        const executable = await prepared
+        const executable = await getExecutable()
         const result = await executeCli(args, { signal: run?.signal, executable })
         return { ok: result.exitCode === 0, content: [result.stdout, result.stderr].filter(Boolean).join('\n') || `进程退出码：${result.exitCode}`, ...(result.exitCode === 0 ? {} : { error: `lark-cli 退出码：${result.exitCode}` }) }
       } catch (error) { return { ok: false, content: `lark-cli 执行失败：${error.message}`, error: error.message } }
