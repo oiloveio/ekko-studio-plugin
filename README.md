@@ -4,7 +4,7 @@
 
 | 插件 | 能力 | 安装目录 | 当前验证 |
 | --- | --- | --- | --- |
-| [飞书 CLI](plugins/lark-cli/README.md) | 通过 lark-cli 调用飞书；包含读写操作 | `plugins/lark-cli` | 本机 CLI 帮助及基础测试通过 |
+| [飞书 CLI](plugins/lark-cli/README.md) | 随附官方 lark-cli v1.0.100；包含读写操作 | `plugins/lark-cli` | 官方包校验及基础测试 |
 | [Himalaya 邮箱](plugins/himalaya/README.md) | 查询账号、邮箱、邮件列表，搜索及读取邮件 | `plugins/himalaya` | 本机 Himalaya 2.2.1 版本及基础测试通过 |
 
 两个插件均未在目标 Studio 服务器完成安装、登录或真实业务联调。功能受服务器上的 CLI 版本、账号权限及网络影响。
@@ -34,7 +34,7 @@
 
 ## 服务器准备与权限
 
-- 飞书插件需要在 Studio 进程所在环境安装 `lark-cli`，并配置和授权飞书账号。
+- 飞书插件随附官方 lark-cli v1.0.100，不使用服务器已有的 CLI；需要在 Studio 服务器以对应系统用户配置和授权飞书账号。支持 Linux x86_64 / ARM64 和 macOS ARM64，要求可用的 `tar` 及可执行的插件数据目录。
 - 邮箱插件需要在同一环境安装、配置 `himalaya`；本机验证版本为 2.2.1。邮箱插件当前只支持查询和读取，不支持发邮件。
 - 两个插件都使用 Studio 进程所属操作系统账号的 CLI 配置与凭据，不会随 Studio 用户或 Profile 自动隔离。只有信任所有可调用插件工具的用户时才启用。
 - 飞书插件可执行写入及原生 API 调用；用户授权、飞书权限和 Studio 访问控制需要分别核对。插件拒绝显式 `--yes` / `-y`，但这不构成完整的审批或安全机制。
