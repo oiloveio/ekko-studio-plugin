@@ -1,1 +1,9 @@
-{"name":"ekko-studio-plugin-himalaya-mail","version":"0.1.0","type":"module","private":true,"scripts":{"test":"node --test"}}
+{
+  "name": "ekko-studio-plugin-himalaya-mail",
+  "version": "0.2.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

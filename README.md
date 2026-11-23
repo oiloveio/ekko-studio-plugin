@@ -4,18 +4,18 @@
 
 | 插件 | 能力 | 安装目录 | 当前验证 |
 | --- | --- | --- | --- |
-| [飞书 CLI](plugins/lark-cli/README.md) | 随附官方 lark-cli v1.0.100；包含读写操作 | `plugins/lark-cli` | 官方包校验及基础测试 |
-| [Himalaya 邮箱](plugins/himalaya/README.md) | 查询账号、邮箱、邮件列表，搜索及读取邮件 | `plugins/himalaya` | 本机 Himalaya 2.2.1 版本及基础测试通过 |
+| [飞书 CLI](plugins/lark-cli/README.md) | 随附官方 lark-cli v1.0.100；包含读写操作 | `plugins/lark-cli` | 真实日历只读联调及基础测试 |
+| [Himalaya 邮箱](plugins/himalaya/README.md) | 查询账号、邮箱、邮件列表，搜索及读取邮件 | `plugins/himalaya` | 真实邮箱文件夹联调及基础测试 |
 
-两个插件均未在目标 Studio 服务器完成安装、登录或真实业务联调。功能受服务器上的 CLI 版本、账号权限及网络影响。
+两个插件均提供 Studio 设置页和只读连接检查。已在当前 Studio 服务器验证飞书日历与邮箱文件夹访问；其他服务器仍需配置与验证，功能受 CLI 版本、账号权限及网络影响。
 
 ## 安装到 Studio
 
 本仓库的 `main` 分支集中维护插件源码；Ekko Studio 不会自动扫描子目录。[Studio 官方文档](https://github.com/EKKOLearnAI/ekko-studio/blob/main/docs/plugins.md)支持固定到完整提交的 GitHub 安装源。以下发布提交各自以插件内容为根目录，可分别粘贴到 Studio 的「安装插件」输入框：
 
 ```text
-飞书 CLI：github:oiloveio/ekko-studio-plugin#762c3fa6393efe2220cc8eea823639045fcf13e4
-Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#b35ad06a5811341e2e9997e7b4753c4850e970dc
+飞书 CLI：github:oiloveio/ekko-studio-plugin#0e68fe2368bc50f482d58c36d1772e056e0c3420
+Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#7845819d3ba17d0a5600d7ac88c732c6481b8457
 ```
 
 安装时只复制冒号后的完整 `github:...` 字符串。这些是固定版本；后续更新插件时需要生成并使用新的提交地址。发布分支分别为 `releases/lark-cli` 和 `releases/himalaya`。仓库目前为公开状态；若改为私有，远程固定提交安装能否认证取决于服务器环境，尚未验证。
@@ -52,3 +52,7 @@ Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#b35ad06a5811341e2e9997e7b47
 ## 开发与验证
 
 在对应插件目录运行 `npm test`，分别检查飞书和邮箱插件。测试包括命令参数、取消请求及调用本机 CLI；它们不证明服务器环境、飞书或邮箱账号可用。
+
+## 连接与配置
+
+启用后，在 Studio 设置中分别打开「飞书连接」和「邮箱连接」，检查 CLI、账号和只读业务访问状态。邮箱页可保存当前 Studio 用户和 Profile 的默认账号名称；显式工具参数优先。页面不会保存认证凭据，也不能隔离服务器系统账号中的 CLI 凭据；登录、授权及邮箱连接配置仍需在运行 Studio 的服务器完成。
