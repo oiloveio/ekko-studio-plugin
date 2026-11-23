@@ -1,8 +1,38 @@
 import { spawn } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
+import { createHash } from 'node:crypto'
+import { readFile, mkdir, mkdtemp, chmod, rename, rm } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+import { join, dirname } from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
 const domains = new Set(['application', 'approval', 'apps', 'attendance', 'base', 'calendar', 'contact', 'docs', 'drive', 'event', 'im', 'mail', 'markdown', 'mindnotes', 'minutes', 'note', 'okr', 'sheets', 'slides', 'task', 'vc', 'whiteboard', 'wiki', 'api', 'schema', 'skills', 'whoami', 'doctor'])
 const maxOutput = 1024 * 1024
+const releases = {
+  'linux-x64': ['linux-amd64', 'cd7363f731c9e5dd2becd909837922cffea8aad229d581a84eb13c6aa0ce6808'],
+  'linux-arm64': ['linux-arm64', '166e95ffaec34f82123f50316480250329884c09e71a6f92313047e2c5c3fa5d'],
+  'darwin-arm64': ['darwin-arm64', 'd068a27f608335016a8a7fb1b3cd1fccfb96bda92075a027e2bf1c4c23134e30']
+}
+const execFileAsync = promisify(execFile)
+
+export async function prepareCli(dataDir) {
+  if (!dataDir) throw new Error('宿主未提供插件数据目录。')
+  const release = releases[`${process.platform}-${process.arch}`]
+  if (!release) throw new Error(`暂不支持此平台：${process.platform}-${process.arch}。`)
+  const archive = join(dirname(fileURLToPath(import.meta.url)), 'vendor', `lark-cli-1.0.100-${release[0]}.tar.gz`)
+  const contents = await readFile(archive)
+  if (createHash('sha256').update(contents).digest('hex') !== release[1]) throw new Error('官方发行包 SHA-256 校验失败。')
+  await mkdir(dataDir, { recursive: true, mode: 0o700 })
+  const temp = await mkdtemp(join(dataDir, '.lark-cli-'))
+  try {
+    await execFileAsync('tar', ['-xzf', archive, '-C', temp, 'lark-cli'], { timeout: 30000 })
+    const target = join(dataDir, 'lark-cli-1.0.100')
+    await chmod(join(temp, 'lark-cli'), 0o700)
+    await rename(join(temp, 'lark-cli'), target)
+    return target
+  } finally { await rm(temp, { recursive: true, force: true }) }
+}
 
 export function validate(args) {
   if (!Array.isArray(args) || args.length < 1 || args.length > 100 || args.some(x => typeof x !== 'string' || x.includes('\0') || x.length > 100000)) throw new Error('args 必须是 1–100 个字符串组成的参数数组。')
@@ -39,6 +69,7 @@ export function executeCli(args, { signal, executable = 'lark-cli' } = {}) {
 }
 
 export function apply(ctx) {
+  let prepared
   return ctx.extensions.tools.register({
     name: 'run',
     description: '调用服务器已安装并授权的 lark-cli 操作飞书。先用 ["领域", "--help"] 或 ["schema", "服务.资源.方法"] 查询，再传参数数组；不要包含 lark-cli 本身。优先 +快捷命令。写入前核对用户授权，不得擅自发消息。本工具拒绝显式 --yes，但原生 API 仍可执行写操作，此限制不构成审批。所有 Studio 用户共享服务器操作系统账号的飞书凭据，不按 Studio 用户隔离。',
@@ -46,7 +77,9 @@ export function apply(ctx) {
     inputSchema: { type: 'object', properties: { args: { type: 'array', items: { type: 'string' }, description: '不含程序名的参数数组，例如 ["docs", "--help"]。' } }, required: ['args'] },
     async execute({ args }, run) {
       try {
-        const result = await executeCli(args, { signal: run?.signal })
+        prepared ??= prepareCli(ctx.paths?.dataDir).catch(error => { prepared = undefined; throw error })
+        const executable = await prepared
+        const result = await executeCli(args, { signal: run?.signal, executable })
         return { ok: result.exitCode === 0, content: [result.stdout, result.stderr].filter(Boolean).join('\n') || `进程退出码：${result.exitCode}`, ...(result.exitCode === 0 ? {} : { error: `lark-cli 退出码：${result.exitCode}` }) }
       } catch (error) { return { ok: false, content: `lark-cli 执行失败：${error.message}`, error: error.message } }
     }
