@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 
 export function buildArgs(input) {
   const { action, account, mailbox, page = 1, pageSize = 25, query, id } = input
@@ -22,13 +23,14 @@ export function invoke(args, signal, executable = 'himalaya') {
     if (signal?.aborted) return reject(new Error('请求已取消'))
     const child = spawn(executable,args,{shell:false,stdio:['ignore','pipe','pipe'],env:{...process.env,PATH:[process.env.PATH,'/opt/homebrew/bin','/usr/local/bin'].filter(Boolean).join(':')}})
     let out='', err='', bytes=0, reason=''
+    const outDecoder=new StringDecoder('utf8'), errDecoder=new StringDecoder('utf8')
     const stop = s => { if (!reason) {reason=s; child.kill('SIGKILL')} }
-    const receive = (c, error) => {bytes+=c.length;if(bytes>1048576) return stop('输出超过 1 MiB，请缩小范围。'); if(error) err+=c.toString(); else out+=c.toString()}
+    const receive = (c, error) => {bytes+=c.length;if(bytes>1048576) return stop('输出超过 1 MiB，请缩小范围。'); if(error) err+=errDecoder.write(c); else out+=outDecoder.write(c)}
     const abort=()=>stop('请求已取消'); signal?.addEventListener('abort',abort,{once:true})
     const timer=setTimeout(()=>stop('命令超过 110 秒。'),110000)
     const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort)}
     child.stdout.on('data',c=>receive(c,false));child.stderr.on('data',c=>receive(c,true))
-    child.on('error',e=>{cleanup();reject(e)}); child.on('close',code=>{cleanup();if(reason) reject(new Error(reason));else resolve({code,out,err})})
+    child.on('error',e=>{cleanup();reject(e)}); child.on('close',code=>{cleanup();if(reason) reject(new Error(reason));else {out+=outDecoder.end();err+=errDecoder.end();resolve({code,out,err})}})
   })
 }
 
