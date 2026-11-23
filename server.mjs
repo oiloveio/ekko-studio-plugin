@@ -35,5 +35,32 @@ export function invoke(args, signal, executable = 'himalaya') {
 }
 
 export function apply(ctx) {
-  return ctx.extensions.tools.register({name:'mail',description:'使用服务器上已配置的 Himalaya 查询邮箱：accounts、mailboxes、list、search、read。search 使用 Himalaya 查询语法，如 subject 发票。read 默认不标记已读。仅按用户授权访问；服务器系统账号的邮箱凭据由所有有权调用该工具的 Studio 用户共享。',readOnly:true,inputSchema:{type:'object',properties:{action:{type:'string',enum:['accounts','mailboxes','list','search','read']},account:{type:'string'},mailbox:{type:'string'},page:{type:'integer'},pageSize:{type:'integer'},query:{type:'string'},id:{type:'string'}},required:['action']},async execute(input,run){try{const r=await invoke(buildArgs(input),run?.signal);return {ok:r.code===0,content:[r.out,r.err].filter(Boolean).join('\n') || `退出码 ${r.code}`,...(r.code===0?{}:{error:`Himalaya 退出码 ${r.code}`})}}catch(e){return {ok:false,content:`Himalaya 调用失败：${e.message}`,error:e.message}}}})
+  const userSettings = run => run.state.plugin.namespace('users', String(run.identity.userId)).namespace('profiles', String(run.identity.profile))
+  ctx.extensions.rpc.register('get-settings', async (_input, run) => await userSettings(run).get('preferences') ?? { account: '' })
+  ctx.extensions.rpc.register('save-settings', async (input, run) => {
+    const account = input?.account
+    if (typeof account !== 'string' || account.length > 128 || (account && (!account.trim() || account.startsWith('-') || account.includes('\0')))) throw new Error('邮箱账号名称无效。')
+    await userSettings(run).set('preferences', { account })
+    return { ok: true }
+  })
+  ctx.extensions.rpc.register('check-connection', async (_input, run) => {
+    const checks = []
+    try {
+      const version = await invoke(['--version'], run?.signal)
+      if (version.code !== 0) throw new Error('version')
+      checks.push({ label: 'Himalaya 程序', state: 'ok' })
+      const result = await invoke(buildArgs({ action: 'accounts' }), run?.signal)
+      if (result.code !== 0) return { ok: false, checks: [...checks, { label: '账号配置', state: 'error' }], message: '无法读取邮箱账号配置，请检查服务器上的 Himalaya 配置。' }
+      let accounts
+      try { accounts = JSON.parse(result.out).accounts } catch { accounts = null }
+      const selected = (await userSettings(run).get('preferences'))?.account
+      const account = Array.isArray(accounts) && (selected ? accounts.find(a => a.name === selected) : accounts.find(a => a.default) || accounts[0])
+      if (!account?.name) return { ok: false, checks: [...checks, { label: '账号配置', state: 'error' }], message: '尚未找到已配置的邮箱账号。' }
+      checks.push({ label: '账号配置', state: 'ok' })
+      const boxes = await invoke(buildArgs({ action: 'mailboxes', account: account.name }), run?.signal)
+      checks.push({ label: '邮箱文件夹访问', state: boxes.code === 0 ? 'ok' : 'error' })
+      return { ok: boxes.code === 0, checks, account: account.name, message: boxes.code === 0 ? '已成功读取邮箱文件夹列表。' : '无法读取邮箱文件夹，请检查邮箱认证及网络。' }
+    } catch { return { ok: false, checks: [{ label: 'Himalaya 程序', state: 'error' }], message: '无法启动 Himalaya，请在 Studio 服务器安装并配置它。' } }
+  })
+  return ctx.extensions.tools.register({name:'mail',description:'使用服务器上已配置的 Himalaya 查询邮箱：accounts、mailboxes、list、search、read。search 使用 Himalaya 查询语法，如 subject 发票。read 默认不标记已读。仅按用户授权访问；服务器系统账号的邮箱凭据由所有有权调用该工具的 Studio 用户共享。',readOnly:true,inputSchema:{type:'object',properties:{action:{type:'string',enum:['accounts','mailboxes','list','search','read']},account:{type:'string'},mailbox:{type:'string'},page:{type:'integer'},pageSize:{type:'integer'},query:{type:'string'},id:{type:'string'}},required:['action']},async execute(input,run){try{const preferred = input.action !== 'accounts' && !input.account ? (await userSettings(run).get('preferences'))?.account : '';const r=await invoke(buildArgs(preferred ? {...input, account: preferred} : input),run?.signal);return {ok:r.code===0,content:[r.out,r.err].filter(Boolean).join('\n') || `退出码 ${r.code}`,...(r.code===0?{}:{error:`Himalaya 退出码 ${r.code}`})}}catch(e){return {ok:false,content:`Himalaya 调用失败：${e.message}`,error:e.message}}}})
 }
