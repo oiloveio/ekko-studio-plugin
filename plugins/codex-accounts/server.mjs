@@ -140,7 +140,7 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
     const job=jobs.get(scope(run.identity));
     if(!job)return {state:'idle'};
     const {id,state,url,code,message}=job;
-    return {id,state,url,code,message};
+    return {id,state,...(typeof url==='string'?{url}:{}),...(typeof code==='string'?{code}:{}),...(typeof message==='string'?{message}:{})};
   });
   rpc.register('cancel-login',async(_input,run)=>{
     const job=jobs.get(scope(run.identity));
@@ -157,6 +157,7 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
         if(busy(key)||jobs.get(key)?.controller)throw Error('有会话或授权正在运行，请稍后移除。');
         await rm(join(root,a.id),{recursive:true,force:true});
         s.accounts=s.accounts.filter(x=>x.id!==a.id);
+        const job=jobs.get(key);if(job?.id===a.id)discard(key,job);
       } else a.disabled=input.action==='disable';
       if(s.preferred===a.id && input.action!=='enable')s.preferred=null;
       await save(path,s);return {ok:true};
