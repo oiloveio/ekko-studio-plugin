@@ -77,6 +77,7 @@ test('page login scopes code to identity and rejects a different account on reau
  await chmod(home,0o701);
  await f.api('start-login',{id});
  const p=await f.api('login-progress');assert.equal(p.state,'waiting');assert.equal(p.code,'MOCK-ONLY');
+ assert.deepEqual(p,JSON.parse(JSON.stringify(p))); // Studio rejects own properties with undefined values.
  const other={identity:{userId:'other',profile:'default'}};
  assert.deepEqual(await f.rpc.get('login-progress')({},other),{state:'idle'});
  await f.rpc.get('cancel-login')({},other);
@@ -85,6 +86,7 @@ test('page login scopes code to identity and rejects a different account on reau
  f.state.approve();
  const finished=await waitFor(async()=>{const p=await f.api('login-progress');return p.state==='complete'&&p;});
  assert.equal(finished.code,undefined);
+ assert.deepEqual(finished,{id,state:'complete'});
  assert.equal((await f.api('settings')).accounts[0].plan,'plus');
  assert.equal((await f.api('settings')).accounts[0].owner,undefined);
  assert.equal((await stat(home)).mode&0o777,0o700);
@@ -100,8 +102,9 @@ test('page login scopes code to identity and rejects a different account on reau
 test('cancel clears page code without changing binding; disabled skips new sessions and removed never reroutes pinned ones',async t=>{
  const f=await fixture(t), {id}=await f.api('add-account',{label:'A'}), b=await f.api('add-account',{label:'B'});
  await f.api('start-login',{id});await f.api('cancel-login');
- assert.equal((await f.api('login-progress')).code,undefined);
- assert.equal((await f.api('login-progress')).state,'cancelled');
+ const cancelled=await f.api('login-progress');
+ assert.equal(cancelled.code,undefined);assert.equal(cancelled.state,'cancelled');
+ assert.deepEqual(cancelled,JSON.parse(JSON.stringify(cancelled)));
  await f.turn('pinned');
  await f.api('manage-account',{id,action:'disable'});await f.turn('new');
  assert.equal(f.state.calls.at(-1).home.split('/').at(-1),b.id);
