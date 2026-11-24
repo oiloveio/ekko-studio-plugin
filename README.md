@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | [飞书 CLI](plugins/lark-cli/README.md) | 随附官方 lark-cli v1.0.100；包含读写操作 | `plugins/lark-cli` | 真实日历只读联调及基础测试 |
 | [Himalaya 邮箱](plugins/himalaya/README.md) | 查询账号、邮箱、邮件列表，搜索及读取邮件 | `plugins/himalaya` | 真实邮箱文件夹联调及基础测试 |
-| [Codex 多账号](plugins/codex-accounts/README.md) | 官方 Codex CLI；为新会话选择订阅账号 | `plugins/codex-accounts` | 自动化测试和空凭据 CLI 检查；真实订阅未验 |
+| [Codex 多账号](plugins/codex-accounts/README.md) | 插件页发起官方授权；为新会话选择订阅账号 | `plugins/codex-accounts` | 已验证获取设备码；真实订阅轮询待验 |
 
 两个插件均提供 Studio 设置页和只读连接检查。已在当前 Studio 服务器验证飞书日历与邮箱文件夹访问；其他服务器仍需配置与验证，功能受 CLI 版本、账号权限及网络影响。
 
@@ -17,9 +17,10 @@
 ```text
 飞书 CLI：github:oiloveio/ekko-studio-plugin#d7a7125aa64f9b3af68622795c6df60def6c13b1
 Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#86b30c33d0aa07e1f6762718b5cc1d3031e8ac99
+Codex 多账号：github:oiloveio/ekko-studio-plugin#766a2ee4d6c1d4657b7afdf3c3eb34d6ba15f14b
 ```
 
-安装时只复制冒号后的完整 `github:...` 字符串。这些是固定版本；后续更新插件时需要生成并使用新的提交地址。发布分支分别为 `releases/lark-cli` 和 `releases/himalaya`。仓库目前为公开状态；若改为私有，远程固定提交安装能否认证取决于服务器环境，尚未验证。
+安装时只复制冒号后的完整 `github:...` 字符串。这些是固定版本；后续更新插件时需要生成并使用新的提交地址。发布分支分别为 `releases/lark-cli`、`releases/himalaya` 和 `releases/codex-accounts`。仓库目前为公开状态；若改为私有，远程固定提交安装能否认证取决于服务器环境，尚未验证。
 
 也可使用服务器本地目录安装：
 
@@ -36,6 +37,7 @@ Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#86b30c33d0aa07e1f6762718b5c
    ```text
    /实际路径/ekko-studio-plugin/plugins/lark-cli
    /实际路径/ekko-studio-plugin/plugins/himalaya
+   /实际路径/ekko-studio-plugin/plugins/codex-accounts
    ```
 
 3. 安装并启用需要的插件。新安装的第三方插件默认禁用。安装后刷新 Agent 的 MCP 工具列表或开始新会话。
