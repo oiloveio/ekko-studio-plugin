@@ -93,7 +93,7 @@ export function apply(ctx) {
   })
   return ctx.extensions.tools.register({
     name: 'run',
-    description: '调用服务器已安装并授权的 lark-cli 操作飞书。先用 ["领域", "--help"] 或 ["schema", "服务.资源.方法"] 查询，再传参数数组；不要包含 lark-cli 本身。优先 +快捷命令。写入前核对用户授权，不得擅自发消息。本工具拒绝显式 --yes，但原生 API 仍可执行写操作，此限制不构成审批。所有 Studio 用户共享服务器操作系统账号的飞书凭据，不按 Studio 用户隔离。',
+    description: '调用随插件提供的 lark-cli 操作飞书。先用 ["领域", "--help"] 或 ["schema", "服务.资源.方法"] 查询，再传参数数组；不要包含 lark-cli 本身。电子表格：先用 sheets +workbook-info 确认子表和 resource_type；普通 sheet 用 sheets +csv-get、+cells-get，链接的 sheet 参数是子表 ID，传 --sheet-id；--range 必须是 A1 格式（如 A1:B5），不可把 sheet ID 或链接中的 rangeId 当成范围。若选区范围无法确定，询问用户，不要猜测、扩大范围或省略 --range（省略可能读取整表）。resource_type 为 bitable 的子页需使用 base 命令，不可当普通单元格读取。写入前核对用户授权，不得擅自发消息。本工具拒绝显式 --yes，但原生 API 仍可执行写操作，此限制不构成审批。所有 Studio 用户共享服务器操作系统账号的飞书凭据，不按 Studio 用户隔离。',
     readOnly: false,
     inputSchema: { type: 'object', properties: { args: { type: 'array', items: { type: 'string' }, description: '不含程序名的参数数组，例如 ["docs", "--help"]。' } }, required: ['args'] },
     async execute({ args }, run) {
