@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, realpath, lstat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, realpath, lstat, mkdtemp, rm } from 'node:fs/promises';
 import { join, relative, isAbsolute } from 'node:path';
 import { executable, loginState, cli, argsFor, threadId } from './engine.mjs';
+import { deviceLogin } from './device.mjs';
 
 function hash(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 export function scope(identity) {
@@ -10,7 +11,7 @@ export function scope(identity) {
   return hash([userId,profile]);
 }
 const contains = (dir,path) => { const rel=relative(dir,path); return rel==='' || (rel!=='..' && !rel.startsWith('../') && !isAbsolute(rel)); };
-const shell = s => "'"+s.replaceAll("'", "'\\''")+"'";
+
 const maxAccounts=12;
 const empty=()=>({accounts:[],mode:'round-robin',preferred:null,last:null,sessions:{}});
 
@@ -29,6 +30,10 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
   const locks=new Map();
   const active=new Set();
   const statusSlots=new Set();
+  const jobs=new Map();
+  let pending=0;
+  const busy=key=>[...active].some(id=>id.startsWith(key));
+  const discard=(key,job)=>{if(jobs.get(key)===job)jobs.delete(key);clearTimeout(job.cleanup);};
   function serial(key,fn) {
     const job=(locks.get(key)??Promise.resolve()).catch(()=>{}).then(fn);
     locks.set(key,job);
@@ -59,7 +64,7 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
     statusSlots.add(key);
     try {
       const s=await load(path); const bin=await getPath().catch(()=>null);
-      return {available:!!bin,mode:s.mode,preferred:s.preferred,accounts:await Promise.all(s.accounts.map(async a=>({...a,status:bin?await status(bin,root,a.id,run.signal):'unavailable'})))};
+      return {available:!!bin,mode:s.mode,preferred:s.preferred,accounts:await Promise.all(s.accounts.map(async a=>({id:a.id,label:a.label,plan:a.plan??null,disabled:!!a.disabled,status:bin?await status(bin,root,a.id,run.signal):'unavailable'})))};
     } finally { statusSlots.delete(key); }
   });
   rpc.register('add-account',async(input,run)=>{
@@ -73,18 +78,85 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
       s.accounts.push({id,label}); await save(path,s); return {id};
     });
   });
-  rpc.register('login-command',async(input,run)=>{
-    const {root,path}=await location(run.identity); const s=await load(path);
-    if(!s.accounts.some(a=>a.id===input?.id)) throw Error('找不到该账号槽位。');
-    const h=await homeFor(root,input.id), executable=await getPath();
-    return {command:`(umask 077; export HOME=${shell(h)} CODEX_HOME=${shell(h)} XDG_CONFIG_HOME=${shell(h)} XDG_DATA_HOME=${shell(h)} XDG_CACHE_HOME=${shell(h)}; unset OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL; ${shell(executable)} login -c 'cli_auth_credentials_store="file"' --device-auth)`};
+  rpc.register('start-login',async(input,run)=>{
+    const {key,root,path}=await location(run.identity);
+    const bin=await getPath();
+    return serial(key,async()=>{
+      const s=await load(path), a=s.accounts.find(x=>x.id===input?.id);
+      if(!a)throw Error('找不到该账号槽位。');
+      if(!a.owner && Object.values(s.sessions).some(x=>x.account===a.id)) throw Error('旧槽位已有会话，但缺少可核对的账号身份；为避免换错号，请添加新槽位。');
+      const old=jobs.get(key);
+      if(old?.controller)throw Error('已有授权进行中，请先完成或取消。');
+      if(pending>=8)throw Error('服务器正在处理其他授权，请稍后重试。');
+      const home=await homeFor(root,a.id), stage=await mkdtemp(join(root,'.device-'));
+      if(pending>=8){await rm(stage,{recursive:true,force:true});throw Error('服务器正在处理其他授权，请稍后重试。');}
+      if(old)discard(key,old);
+      const job={id:a.id,state:'starting',controller:new AbortController()};
+      jobs.set(key,job);pending++;
+      void (async()=>{
+        try {
+          const result=await (runtime.deviceLogin??deviceLogin)(bin,stage,{signal:job.controller.signal,onCode:({url,code})=>{
+            if(!job.controller.signal.aborted)Object.assign(job,{state:'waiting',url,code});
+          }});
+          await serial(key,async()=>{
+            if(job.controller.signal.aborted)throw Error('授权已取消。');
+            const latest=await load(path), slot=latest.accounts.find(x=>x.id===a.id);
+            if(!slot || busy(key))throw Error('账号或会话正忙，未替换原授权，请稍后重试。');
+            const owner=hash([result.userId,result.workspaceId]);
+            if(slot.owner && slot.owner!==owner)throw Error('授权的是另一个账号或工作区；原绑定未更改。');
+            if(latest.accounts.some(x=>x.id!==slot.id&&x.owner===owner))throw Error('此账号和工作区已绑定到另一个槽位。');
+            const auth=join(stage,'auth.json'), st=await lstat(auth).catch(()=>null);
+            if(!st?.isFile() || (st.mode&0o077)) throw Error('官方授权未生成私有凭据；原绑定未更改。');
+            if(job.controller.signal.aborted)throw Error('授权已取消。');
+            job.state='saving';delete job.code;delete job.url;
+            await rename(auth,join(home,'auth.json'));
+            slot.owner=owner;slot.plan=result.plan;await save(path,latest);
+          });
+          job.state='complete';
+        } catch(e) {
+          job.state=job.controller.signal.aborted?'cancelled':'failed';
+          job.message=e?.code?'授权无法保存；请联系管理员检查服务器文件权限。':(e?.message??'授权失败。');
+        } finally {
+          delete job.url;delete job.code;delete job.controller;
+          pending--;await rm(stage,{recursive:true,force:true}).catch(()=>{});
+          if(jobs.get(key)===job){job.cleanup=setTimeout(()=>discard(key,job),5*60*1000);job.cleanup.unref();}
+        }
+      })();
+      return {state:job.state};
+    });
+  });
+  rpc.register('login-progress',async(_input,run)=>{
+    const job=jobs.get(scope(run.identity));
+    if(!job)return {state:'idle'};
+    const {id,state,url,code,message}=job;
+    return {id,state,url,code,message};
+  });
+  rpc.register('cancel-login',async(_input,run)=>{
+    const job=jobs.get(scope(run.identity));
+    if(job?.controller&&job.state!=='saving'){job.controller.abort();delete job.code;delete job.url;job.state='cancelled';}
+    return {ok:true};
+  });
+  rpc.register('manage-account',async(input,run)=>{
+    const {key,root,path}=await location(run.identity);
+    return serial(key,async()=>{
+      const s=await load(path), a=s.accounts.find(x=>x.id===input?.id);
+      if(!a)throw Error('找不到该账号槽位。');
+      if(!['enable','disable','remove'].includes(input.action))throw Error('未知操作。');
+      if(input.action==='remove'){
+        if(busy(key)||jobs.get(key)?.controller)throw Error('有会话或授权正在运行，请稍后移除。');
+        await rm(join(root,a.id),{recursive:true,force:true});
+        s.accounts=s.accounts.filter(x=>x.id!==a.id);
+      } else a.disabled=input.action==='disable';
+      if(s.preferred===a.id && input.action!=='enable')s.preferred=null;
+      await save(path,s);return {ok:true};
+    });
   });
   rpc.register('save-settings',async(input,run)=>{
     const {key,path}=await location(run.identity);
     return serial(key,async()=>{
       const s=await load(path);
       if(!['round-robin','manual'].includes(input?.mode)) throw Error('调度方式无效。');
-      if(input.mode==='manual'&&!s.accounts.some(a=>a.id===input.preferred)) throw Error('请选择一个已创建的账号。');
+      if(input.mode==='manual'&&!s.accounts.some(a=>a.id===input.preferred&&!a.disabled)) throw Error('请选择一个已启用的账号。');
       s.mode=input.mode; s.preferred=input.mode==='manual'?input.preferred:null;
       await save(path,s); return {ok:true};
     });
@@ -125,10 +197,13 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
           if(Buffer.byteLength(prompt)>512*1024 || images.length>12) throw Error('本轮输入过大。');
           const entry=await serial(key,async()=>{
             const s=await load(path); const pinned=s.sessions[sid];
-            if(pinned) return pinned;
+            if(pinned){
+              if(!s.accounts.some(a=>a.id===pinned.account))throw Error('该会话绑定的账号已移除，不会换号。');
+              return pinned;
+            }
             const abort=run.signal;
             if(abort?.aborted) throw Error('Codex 操作已取消。');
-            const candidates=s.mode==='manual'?s.accounts.filter(a=>a.id===s.preferred):s.accounts;
+            const candidates=s.accounts.filter(a=>!a.disabled&&(s.mode!=='manual'||a.id===s.preferred));
             const checked=await Promise.all(candidates.map(async a=>({a,ready:await status(bin,root,a.id,abort)==='chatgpt'})));
             const ready=checked.filter(x=>x.ready).map(x=>x.a);
             if(abort?.aborted) throw Error('Codex 操作已取消。');
@@ -162,5 +237,5 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
       }};
     }},
   });
-  return ()=>reg.dispose();
+  return ()=>{for(const [key,job] of jobs){job.controller?.abort();discard(key,job);}reg.dispose();};
 }
