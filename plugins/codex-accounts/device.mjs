@@ -51,6 +51,6 @@ export function deviceLogin(bin,home,{signal,onCode,timeout=15*60*1000}) {
       lines.close();clearTimeout(startTimer);clearTimeout(expiry);clearTimeout(force);signal?.removeEventListener('abort',abort);
       if(error||!outcome)reject(error??Error('Codex 授权进程提前结束。'));else resolve(outcome);
     });
-    if(!stopped)send({id:1,method:'initialize',params:{clientInfo:{name:'ekko-codex-accounts',version:'0.2.0'},capabilities:{experimentalApi:true}}});
+    if(!stopped)send({id:1,method:'initialize',params:{clientInfo:{name:'ekko-codex-accounts',version:'0.2.1'},capabilities:{experimentalApi:true}}});
   });
 }

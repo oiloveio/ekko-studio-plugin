@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, realpath, lstat, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, realpath, lstat, mkdtemp, rm, chmod } from 'node:fs/promises';
 import { join, relative, isAbsolute } from 'node:path';
 import { executable, loginState, cli, argsFor, threadId } from './engine.mjs';
 import { deviceLogin } from './device.mjs';
@@ -15,10 +15,21 @@ const contains = (dir,path) => { const rel=relative(dir,path); return rel==='' |
 const maxAccounts=12;
 const empty=()=>({accounts:[],mode:'round-robin',preferred:null,last:null,sessions:{}});
 
+async function protect(path,mode,kind) {
+  const st=await lstat(path);
+  if((kind==='directory'?!st.isDirectory():!st.isFile())||(process.getuid&&st.uid!==process.getuid())) throw Error('账号数据路径类型或所有者不正确。');
+  if((st.mode&0o777)!==mode)await chmod(path,mode);
+  if(((await lstat(path)).mode&0o777)!==mode)throw Error('服务器无法设置账号数据的私有权限。');
+}
+async function privateDirectory(path) {
+  await mkdir(path,{recursive:true,mode:0o700});
+  await protect(path,0o700,'directory');
+}
 async function save(path,state) {
   const tmp=`${path}.${randomUUID()}.tmp`;
   await writeFile(tmp,JSON.stringify(state),{mode:0o600,flag:'wx'});
-  await rename(tmp,path);
+  try{await protect(tmp,0o600,'file');await rename(tmp,path);}
+  finally{await rm(tmp,{force:true});}
 }
 export function selectAccount(state,ready) {
   if (state.mode==='manual') return ready.find(a=>a.id===state.preferred);
@@ -41,16 +52,15 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
     return job;
   }
   async function location(identity) {
-    const key=scope(identity), root=join(ctx.paths.dataDir,'codex-users',key);
-    await mkdir(root,{recursive:true,mode:0o700});
+    const key=scope(identity), base=join(ctx.paths.dataDir,'codex-users'), root=join(base,key);
+    await privateDirectory(base);await privateDirectory(root);
     return {key,root,path:join(root,'pool.json')};
   }
   async function load(path) { try { return JSON.parse(await readFile(path,'utf8')); } catch(e) { if(e.code==='ENOENT')return empty(); throw Error('账号索引无法读取；为避免换错账号，已停止。'); } }
   async function homeFor(root,id) {
     if(!threadId(id)) throw Error('账号槽位无效。');
     const home=join(root,id);
-    const st=await lstat(home);
-    if(!st.isDirectory() || (st.mode & 0o077)) throw Error('账号目录必须是私有目录（0700）。');
+    await protect(home,0o700,'directory');
     return home;
   }
   async function status(path,root,id,signal) {
@@ -74,7 +84,7 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
     return serial(key,async()=>{
       const s=await load(path); if(s.accounts.length>=maxAccounts) throw Error('最多支持 12 个账号。');
       if(s.accounts.some(a=>a.label===label)) throw Error('账号别名已存在。');
-      const id=randomUUID(); await mkdir(join(root,id),{mode:0o700});
+      const id=randomUUID(); await privateDirectory(join(root,id));
       s.accounts.push({id,label}); await save(path,s); return {id};
     });
   });
@@ -89,6 +99,7 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
       if(old?.controller)throw Error('已有授权进行中，请先完成或取消。');
       if(pending>=8)throw Error('服务器正在处理其他授权，请稍后重试。');
       const home=await homeFor(root,a.id), stage=await mkdtemp(join(root,'.device-'));
+      try{await protect(stage,0o700,'directory');}catch(e){await rm(stage,{recursive:true,force:true});throw e;}
       if(pending>=8){await rm(stage,{recursive:true,force:true});throw Error('服务器正在处理其他授权，请稍后重试。');}
       if(old)discard(key,old);
       const job={id:a.id,state:'starting',controller:new AbortController()};
@@ -105,8 +116,8 @@ export function apply(ctx, runtime={executable,loginState,cli}) {
             const owner=hash([result.userId,result.workspaceId]);
             if(slot.owner && slot.owner!==owner)throw Error('授权的是另一个账号或工作区；原绑定未更改。');
             if(latest.accounts.some(x=>x.id!==slot.id&&x.owner===owner))throw Error('此账号和工作区已绑定到另一个槽位。');
-            const auth=join(stage,'auth.json'), st=await lstat(auth).catch(()=>null);
-            if(!st?.isFile() || (st.mode&0o077)) throw Error('官方授权未生成私有凭据；原绑定未更改。');
+            const auth=join(stage,'auth.json');
+            try{await protect(auth,0o600,'file');}catch{throw Error('官方授权未生成可保护的凭据；原绑定未更改。');}
             if(job.controller.signal.aborted)throw Error('授权已取消。');
             job.state='saving';delete job.code;delete job.url;
             await rename(auth,join(home,'auth.json'));

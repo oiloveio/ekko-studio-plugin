@@ -2,7 +2,7 @@
   "id": "codex-accounts",
   "name": "Codex 多账号",
   "description": "使用官方 Codex CLI 运行编码会话，按新会话调度已登录账号。",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "apiVersion": 1,
   "repository": "https://github.com/oiloveio/ekko-studio-plugin",
   "permissions": ["ui", "agents"],

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, readFile, chmod, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { apply, scope, selectAccount } from '../server.mjs';
@@ -29,6 +29,7 @@ async function fixture(t){
    onCode({url:'https://auth.openai.com/codex/device',code:'MOCK-ONLY'});
    await new Promise((resolve,reject)=>{state.approve=resolve;signal.addEventListener('abort',()=>reject(Error('授权已取消。')),{once:true});});
    await writeFile(join(home,'auth.json'),state.loginUser,{mode:0o600});
+   await chmod(join(home,'auth.json'),0o701); // Simulate the NAS ACL rewriting create modes.
    return {userId:state.loginUser,workspaceId:'workspace-a',plan:'plus'};
  },cli:async(_path,args,o)=>{
    if(!o.onEvent)return{code:0,stdout:'codex-cli 0.172.0\n'};
@@ -72,6 +73,8 @@ async function waitFor(check){
 }
 test('page login scopes code to identity and rejects a different account on reauth',async t=>{
  const f=await fixture(t), {id}=await f.api('add-account',{label:'A'});
+ const home=join(f.data,'codex-users',scope(f.identity),id);
+ await chmod(home,0o701);
  await f.api('start-login',{id});
  const p=await f.api('login-progress');assert.equal(p.state,'waiting');assert.equal(p.code,'MOCK-ONLY');
  const other={identity:{userId:'other',profile:'default'}};
@@ -84,6 +87,8 @@ test('page login scopes code to identity and rejects a different account on reau
  assert.equal(finished.code,undefined);
  assert.equal((await f.api('settings')).accounts[0].plan,'plus');
  assert.equal((await f.api('settings')).accounts[0].owner,undefined);
+ assert.equal((await stat(home)).mode&0o777,0o700);
+ assert.equal((await stat(join(home,'auth.json'))).mode&0o777,0o600);
  await f.turn('pinned');
  f.state.loginUser='different-identity';await f.api('start-login',{id});f.state.approve();
  const failed=await waitFor(async()=>{const p=await f.api('login-progress');return p.state==='failed'&&p;});
