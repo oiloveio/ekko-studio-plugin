@@ -1,0 +1,21 @@
+{
+  "id": "codex-accounts",
+  "name": "Codex 多账号",
+  "description": "使用官方 Codex CLI 运行编码会话，按新会话调度已登录账号。",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "repository": "https://github.com/oiloveio/ekko-studio-plugin",
+  "permissions": ["ui", "agents"],
+  "client": "client.mjs",
+  "server": "server.mjs",
+  "views": [
+    {"id":"accounts","title":"Codex 多账号","slot":"page"},
+    {"id":"agent-settings","title":"Codex 多账号","slot":"agent-settings","icon":"code"}
+  ],
+  "navigation": {"main":[{"viewId":"accounts","icon":"code"}]},
+  "configSchema": {
+    "type":"object",
+    "properties":{"codexPath":{"type":"string","title":"Codex CLI 绝对路径（可选）","maxLength":1024}},
+    "additionalProperties":false
+  }
+}
