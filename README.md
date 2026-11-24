@@ -14,7 +14,7 @@
 本仓库的 `main` 分支集中维护插件源码；Ekko Studio 不会自动扫描子目录。[Studio 官方文档](https://github.com/EKKOLearnAI/ekko-studio/blob/main/docs/plugins.md)支持固定到完整提交的 GitHub 安装源。以下发布提交各自以插件内容为根目录，可分别粘贴到 Studio 的「安装插件」输入框：
 
 ```text
-飞书 CLI：github:oiloveio/ekko-studio-plugin#403a65a7936ce4f595eeb903aa454bc5beb08a60
+飞书 CLI：github:oiloveio/ekko-studio-plugin#d7a7125aa64f9b3af68622795c6df60def6c13b1
 Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#86b30c33d0aa07e1f6762718b5cc1d3031e8ac99
 ```
 

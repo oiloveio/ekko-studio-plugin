@@ -12,6 +12,9 @@ test('解包官方版本并注册工具', async t => {
   let tool
   apply({ paths: { dataDir: dir }, extensions: { rpc: { register() {} }, tools: { register(value) { tool = value; return () => {} } } } })
   assert.equal(tool.readOnly, false)
+  assert.match(tool.description, /rangeId/)
+  assert.match(tool.description, /不可.*当成范围/)
+  assert.match(tool.description, /不要猜测、扩大范围/)
   const result = await tool.execute({ args: ['docs', '--help'] }, {})
   assert.equal(result.ok, true)
   if (process.getuid) assert.equal((await stat(join(dir, 'lark-cli-1.0.100'))).uid, process.getuid())
