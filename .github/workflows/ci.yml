@@ -17,3 +17,4 @@ jobs:
       - run: node --test test/*.test.mjs
       - run: npm test --prefix plugins/lark-cli
       - run: npm test --prefix plugins/himalaya
+      - run: npm test --prefix plugins/codex-accounts

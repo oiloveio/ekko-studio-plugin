@@ -6,6 +6,7 @@
 | --- | --- | --- | --- |
 | [飞书 CLI](plugins/lark-cli/README.md) | 随附官方 lark-cli v1.0.100；包含读写操作 | `plugins/lark-cli` | 真实日历只读联调及基础测试 |
 | [Himalaya 邮箱](plugins/himalaya/README.md) | 查询账号、邮箱、邮件列表，搜索及读取邮件 | `plugins/himalaya` | 真实邮箱文件夹联调及基础测试 |
+| [Codex 多账号](plugins/codex-accounts/README.md) | 官方 Codex CLI；为新会话选择订阅账号 | `plugins/codex-accounts` | 自动化测试和空凭据 CLI 检查；真实订阅未验 |
 
 两个插件均提供 Studio 设置页和只读连接检查。已在当前 Studio 服务器验证飞书日历与邮箱文件夹访问；其他服务器仍需配置与验证，功能受 CLI 版本、账号权限及网络影响。
 

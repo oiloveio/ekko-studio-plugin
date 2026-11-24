@@ -1,0 +1,166 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile, rename, realpath, lstat } from 'node:fs/promises';
+import { join, relative, isAbsolute } from 'node:path';
+import { executable, loginState, cli, argsFor, threadId } from './engine.mjs';
+
+function hash(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
+export function scope(identity) {
+  const { userId, profile } = identity ?? {};
+  if (!((typeof userId === 'string' && userId.length) || Number.isSafeInteger(userId)) || typeof profile !== 'string' || !profile) throw Error('Studio 未提供可验证的账号与 Profile 身份。');
+  return hash([userId,profile]);
+}
+const contains = (dir,path) => { const rel=relative(dir,path); return rel==='' || (rel!=='..' && !rel.startsWith('../') && !isAbsolute(rel)); };
+const shell = s => "'"+s.replaceAll("'", "'\\''")+"'";
+const maxAccounts=12;
+const empty=()=>({accounts:[],mode:'round-robin',preferred:null,last:null,sessions:{}});
+
+async function save(path,state) {
+  const tmp=`${path}.${randomUUID()}.tmp`;
+  await writeFile(tmp,JSON.stringify(state),{mode:0o600,flag:'wx'});
+  await rename(tmp,path);
+}
+export function selectAccount(state,ready) {
+  if (state.mode==='manual') return ready.find(a=>a.id===state.preferred);
+  const ids=state.accounts.map(a=>a.id), index=ids.indexOf(state.last);
+  for (let i=1;i<=ids.length;i++) { const found=ready.find(a=>a.id===ids[(index+i)%ids.length]); if(found) return found; }
+}
+
+export function apply(ctx, runtime={executable,loginState,cli}) {
+  const locks=new Map();
+  const active=new Set();
+  const statusSlots=new Set();
+  function serial(key,fn) {
+    const job=(locks.get(key)??Promise.resolve()).catch(()=>{}).then(fn);
+    locks.set(key,job);
+    void job.finally(()=>{if(locks.get(key)===job) locks.delete(key);}).catch(()=>{});
+    return job;
+  }
+  async function location(identity) {
+    const key=scope(identity), root=join(ctx.paths.dataDir,'codex-users',key);
+    await mkdir(root,{recursive:true,mode:0o700});
+    return {key,root,path:join(root,'pool.json')};
+  }
+  async function load(path) { try { return JSON.parse(await readFile(path,'utf8')); } catch(e) { if(e.code==='ENOENT')return empty(); throw Error('账号索引无法读取；为避免换错账号，已停止。'); } }
+  async function homeFor(root,id) {
+    if(!threadId(id)) throw Error('账号槽位无效。');
+    const home=join(root,id);
+    const st=await lstat(home);
+    if(!st.isDirectory() || (st.mode & 0o077)) throw Error('账号目录必须是私有目录（0700）。');
+    return home;
+  }
+  async function status(path,root,id,signal) {
+    try { return await runtime.loginState(path,await homeFor(root,id),signal); } catch { return 'unavailable'; }
+  }
+  const getPath=()=>runtime.executable(ctx.config);
+  const rpc=ctx.extensions.rpc;
+  rpc.register('settings',async(_input,run)=>{
+    const {root,path,key}=await location(run.identity);
+    if(statusSlots.has(key)) throw Error('正在检查账号，请稍后重试。');
+    statusSlots.add(key);
+    try {
+      const s=await load(path); const bin=await getPath().catch(()=>null);
+      return {available:!!bin,mode:s.mode,preferred:s.preferred,accounts:await Promise.all(s.accounts.map(async a=>({...a,status:bin?await status(bin,root,a.id,run.signal):'unavailable'})))};
+    } finally { statusSlots.delete(key); }
+  });
+  rpc.register('add-account',async(input,run)=>{
+    const label=typeof input?.label==='string'?input.label.trim():'';
+    if(!label || label.length>48 || /[\u0000-\u001f\u007f]/u.test(label)) throw Error('请输入 1–48 字的账号别名。');
+    const {key,root,path}=await location(run.identity);
+    return serial(key,async()=>{
+      const s=await load(path); if(s.accounts.length>=maxAccounts) throw Error('最多支持 12 个账号。');
+      if(s.accounts.some(a=>a.label===label)) throw Error('账号别名已存在。');
+      const id=randomUUID(); await mkdir(join(root,id),{mode:0o700});
+      s.accounts.push({id,label}); await save(path,s); return {id};
+    });
+  });
+  rpc.register('login-command',async(input,run)=>{
+    const {root,path}=await location(run.identity); const s=await load(path);
+    if(!s.accounts.some(a=>a.id===input?.id)) throw Error('找不到该账号槽位。');
+    const h=await homeFor(root,input.id), executable=await getPath();
+    return {command:`(umask 077; export HOME=${shell(h)} CODEX_HOME=${shell(h)} XDG_CONFIG_HOME=${shell(h)} XDG_DATA_HOME=${shell(h)} XDG_CACHE_HOME=${shell(h)}; unset OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL; ${shell(executable)} login -c 'cli_auth_credentials_store="file"' --device-auth)`};
+  });
+  rpc.register('save-settings',async(input,run)=>{
+    const {key,path}=await location(run.identity);
+    return serial(key,async()=>{
+      const s=await load(path);
+      if(!['round-robin','manual'].includes(input?.mode)) throw Error('调度方式无效。');
+      if(input.mode==='manual'&&!s.accounts.some(a=>a.id===input.preferred)) throw Error('请选择一个已创建的账号。');
+      s.mode=input.mode; s.preferred=input.mode==='manual'?input.preferred:null;
+      await save(path,s); return {ok:true};
+    });
+  });
+  const reg=ctx.extensions.agents.register({
+    id:'codex',name:'Codex 多账号',vendor:'oiloveio',agentApiVersion:1,
+    getStatus:async()=>{
+      try { const bin=await getPath(); const v=await runtime.cli(bin,['--version'],{home:'/tmp',cwd:'/tmp'}); const m=v.stdout.match(/^codex-cli (\d+\.\d+\.\d+(?:-[\w.-]+)?)\s*$/m); return v.code===0&&m?{installed:true,version:m[1],source:'native-cli'}:{installed:false,version:'',error:'无法识别 Codex CLI 版本。'}; }
+      catch {return {installed:false,version:'',source:'not-installed'};}
+    },
+    management:{settings:()=>({viewId:'agent-settings'}),installGuideUrl:'https://developers.openai.com/codex/cli/'},
+    modes:{global:{listModels:async()=>({status:'ready',scope:'builtin',source:'codex-cli',models:[{id:'native',name:'Codex 默认模型',isDefault:true}]})}},
+    features:{surfaces:['chat'],streaming:true,resume:true},
+    runtime:{createSession(session){
+      return {dispose(){},async run(input,run){
+        if (run.mode!=='global') throw Error('请使用 Codex 多账号的全局模式。');
+        const {key,root,path}=await location(run.identity);
+        const sessionId=run.identity?.sessionId;
+        if(typeof sessionId!=='string'||!sessionId|| session.identity?.sessionId!==sessionId || scope(session.identity)!==key) throw Error('Studio 会话身份不匹配。');
+        const sid=hash(sessionId), lock=key+sid;
+        if(active.has(lock)) throw Error('该会话已有 Codex 请求在运行。');
+        active.add(lock);
+        try {
+          const cwd=await realpath(run.paths.workspaceDir);
+          const secrets=await realpath(join(ctx.paths.dataDir,'codex-users'));
+          if(contains(cwd,secrets)||contains(secrets,cwd)) throw Error('请选择独立项目工作区，不要将包含凭据目录的上级路径设为工作区。');
+          const bin=await getPath();
+          const images=[], parts=[];
+          for (const part of input.input) {
+            if (part.type==='text') parts.push(part.text);
+            else {
+              const attachment=await run.attachments.resolve(part.assetId);
+              if (part.type==='image') images.push(attachment.localPath);
+              else parts.push(`附件（本地路径，请按需读取）：${JSON.stringify({name:part.name,path:attachment.localPath})}`);
+            }
+          }
+          const prompt=[...input.instructions.map(i=>i.text),...parts].join('\n\n');
+          if(Buffer.byteLength(prompt)>512*1024 || images.length>12) throw Error('本轮输入过大。');
+          const entry=await serial(key,async()=>{
+            const s=await load(path); const pinned=s.sessions[sid];
+            if(pinned) return pinned;
+            const abort=run.signal;
+            if(abort?.aborted) throw Error('Codex 操作已取消。');
+            const candidates=s.mode==='manual'?s.accounts.filter(a=>a.id===s.preferred):s.accounts;
+            const checked=await Promise.all(candidates.map(async a=>({a,ready:await status(bin,root,a.id,abort)==='chatgpt'})));
+            const ready=checked.filter(x=>x.ready).map(x=>x.a);
+            if(abort?.aborted) throw Error('Codex 操作已取消。');
+            const a=selectAccount(s,ready);
+            if(!a) throw Error('没有已登录的 ChatGPT 订阅账号；请在账号页配置，手动模式不会回退到其他账号。');
+            const e={account:a.id}; s.sessions[sid]=e; if(s.mode==='round-robin') s.last=a.id; await save(path,s); return e;
+          });
+          const home=await homeFor(root,entry.account);
+          if(await runtime.loginState(bin,home,run.signal)!=='chatgpt') throw Error('该会话绑定的账号未登录；请重新登录该账号，不会换号。');
+          let thread=entry.thread, messages=[], usage, failed=false, finished=false;
+          await run.output.emit({type:'status',phase:'working',message:'Codex 正在运行（本会话固定账号）'});
+          const timeout=Math.min(20*60*1000,Number.isFinite(run.deadlineAt)?run.deadlineAt-Date.now():20*60*1000);
+          if(timeout<=0||run.signal?.aborted) throw Error('Codex 请求已过期或取消。');
+          const result=await runtime.cli(bin,argsFor({thread,images}),{home,cwd,signal:run.signal,prompt,timeout,onEvent:async event=>{
+            if(event.type==='thread.started') {
+              if(!threadId(event.thread_id)||(thread&&thread!==event.thread_id)) throw Error('Codex 返回了不一致的会话标识。');
+              if(!thread) {
+                thread=event.thread_id;
+                await serial(key,async()=>{ const s=await load(path); s.sessions[sid].thread=thread; await save(path,s); });
+              }
+            }
+            if(event.type==='item.completed'&&event.item?.type==='agent_message'&&typeof event.item.text==='string') {
+              messages.push(event.item.text); await run.output.emit({type:'text.delta',text:(messages.length>1?'\n\n':'')+event.item.text});
+            }
+            if(event.type==='turn.failed') failed=true;
+            if(event.type==='turn.completed'){ finished=true; const u=event.usage; if(u)usage={inputTokens:u.input_tokens??null,outputTokens:u.output_tokens??null,cacheReadTokens:u.cached_input_tokens??null,isEstimated:false}; }
+          }});
+          if(result.code!==0||failed||!finished||!thread) throw Error('Codex 本轮失败（可能是额度、订阅、网络或沙箱问题）；未自动换号或重放。');
+          return {content:[{type:'text',text:messages.join('\n\n')||'Codex 已完成（无文本回复）。'}],finishReason:'stop',...(usage?{usage}:{})};
+        } finally { active.delete(lock); }
+      }};
+    }},
+  });
+  return ()=>reg.dispose();
+}
