@@ -17,7 +17,7 @@
 ```text
 飞书 CLI：github:oiloveio/ekko-studio-plugin#d7a7125aa64f9b3af68622795c6df60def6c13b1
 Himalaya 邮箱：github:oiloveio/ekko-studio-plugin#86b30c33d0aa07e1f6762718b5cc1d3031e8ac99
-Codex 多账号：github:oiloveio/ekko-studio-plugin#766a2ee4d6c1d4657b7afdf3c3eb34d6ba15f14b
+Codex 多账号：github:oiloveio/ekko-studio-plugin#757a8d09ba1e861345c9036777bf5616ffd008c8
 ```
 
 安装时只复制冒号后的完整 `github:...` 字符串。这些是固定版本；后续更新插件时需要生成并使用新的提交地址。发布分支分别为 `releases/lark-cli`、`releases/himalaya` 和 `releases/codex-accounts`。仓库目前为公开状态；若改为私有，远程固定提交安装能否认证取决于服务器环境，尚未验证。
